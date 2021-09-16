@@ -108,7 +108,7 @@ for (t in 1:length(rownames(mitglieder_liste))){
               
             },
             warning=function(cond) {
-              message("Modell konvergiert hiert")
+              message("Modell konvergiert nicht")
               message("Hier ist die originale Fehlermeldung")
               message(cond)
               current.aic <- 999
