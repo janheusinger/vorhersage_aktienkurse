@@ -3,6 +3,7 @@ library(tseries)
 library(ggplot2)
 library(lubridate)
 library(data.table)
+library(forecast)
 
 mitglieder_liste <- read.csv("C:/Users/anaconda/Desktop/DAX_Liste_final.csv", sep=";", header=FALSE, stringsAsFactors=FALSE)
 
