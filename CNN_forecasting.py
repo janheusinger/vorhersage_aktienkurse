@@ -1,16 +1,10 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Sep 14 22:28:18 2021
+#Code zur Vorhersage von Aktienkursen mit Hilfe von Convoluation Neural Networks
 
-@author: janhe
-"""
-
-
+#importieren der notwendigend Bibliotheken
 import numpy as np
 import pandas as pd
 from numpy import array
 import os
-
 from keras.models import Sequential
 from keras.layers import Dense
 from keras.layers import Flatten
@@ -18,40 +12,35 @@ from keras.layers.convolutional import Conv1D
 from keras.layers.convolutional import MaxPooling1D
 from sklearn.preprocessing import MinMaxScaler
 
-# split a univariate sequence into samples
+# definieren der Funktion, um die Zeitreihe in Sequence zu Splitte, Quelle: Brownlee (2017)
 def split_sequence(sequence, n_steps_in, n_steps_out):
 	X, y = list(), list()
 	for i in range(len(sequence)):
-		# find the end of this pattern
 		end_ix = i + n_steps_in
 		out_end_ix = end_ix + n_steps_out
-		# check if we are beyond the sequence
 		if out_end_ix > len(sequence):
 			break
-		# gather input and output parts of the pattern
 		seq_x, seq_y = sequence[i:end_ix], sequence[end_ix:out_end_ix]
 		X.append(seq_x)
 		y.append(seq_y)
 	return array(X), array(y)
 
+#Einlesen und bearbeiten der Daten
 dax_mitglieder = pd.read_csv(r"C:\Users\janhe\Documents\Masterarbeit Statistik\Daten\DAX_Liste_final.csv", sep=";", header=None)
 dax_mitglieder[0] = pd.to_datetime(dax_mitglieder[0])
 dax_mitglieder.set_index(0, inplace=True)
 
 
-for i in range(0,len(dax_mitglieder)): #len(dax_mitglieder)
-    aktuelle_mitglieder = list(dax_mitglieder.iloc[i])
-    aktuelles_datum = dax_mitglieder.index[i]
+for i in range(0,len(dax_mitglieder)): #Schleife über die Datumsangaben in Liste dax_mitglieder
+    aktuelle_mitglieder = list(dax_mitglieder.iloc[i]) #lädt die aktuellen Mitglieder des Index in die Variable
+    aktuelles_datum = dax_mitglieder.index[i] #setzt das aktuelle Datum
+    zwischenergebnis_matrix = pd.DataFrame(columns = ["Aktie", "aktueller_kurs", "vorhersage", "prozentuale_Änderung", "tatsächlich", "absolute_abweichung", "realtive_abweichung", "datum"], dtype=object) #initiert die Tabelle um Ergebnisse zu speichern
 
-    #zwischenergebnis_matrix = np.zeros((len(aktuelle_mitglieder), 8))
-    zwischenergebnis_matrix = pd.DataFrame(columns = ["Aktie", "aktueller_kurs", "vorhersage", "prozentuale_Änderung", "tatsächlich", "absolute_abweichung", "realtive_abweichung", "datum"], dtype=object)
-
-    for mitglied in aktuelle_mitglieder:
-        print(mitglied, aktuelle_mitglieder.index(mitglied), i)
-        data  = pd.read_csv(os.path.join(r"D:\Statistik Masterarbeit\Daten\Aktienkurse_adjustiert", mitglied+".csv.csv").replace("\\","/"))[["adjustierung", "Datum", "RIC"]]
-        data['Datum'] = pd.to_datetime(data['Datum'])
-        data = data.sort_values('Datum', ascending=True)
-        
+    for mitglied in aktuelle_mitglieder: #Schleife über die Mitglieder im aktuellen Monat
+        data  = pd.read_csv(os.path.join(r"D:\Statistik Masterarbeit\Daten\Aktienkurse_adjustiert", mitglied+".csv.csv").replace("\\","/"))[["adjustierung", "Datum", "RIC"]] #lädt die Zeitreihe der aktuellen Aktie in die Varibaale
+        data['Datum'] = pd.to_datetime(data['Datum']) #neue Spalte "Datum" wird erstellt
+        data = data.sort_values('Datum', ascending=True) #sortieren der Werte
+        #Der folgende Codeabschnitt dient zum Auffinden der Zeile mit dem aktuellen Monatsende
         hilfs_df = data
         hilfs_df['Monat'] = hilfs_df['Datum'].dt.month
         hilfs_df['Monat_shift'] = hilfs_df['Monat'].shift(-1)
@@ -60,20 +49,10 @@ for i in range(0,len(dax_mitglieder)): #len(dax_mitglieder)
         relevante_monatsenden = alle_monatsenden[(hilfs_df['Datum'] > "2017-12-01") & (hilfs_df['Datum'] < "2020-12-01")]
         zeile_aktuelles_monatesende = relevante_monatsenden[(relevante_monatsenden["Monat"] == aktuelles_datum.month) & (relevante_monatsenden["Jahr"] == aktuelles_datum.year)].index
         
-        zeitreihe = data[-zeile_aktuelles_monatesende[0]-755:-zeile_aktuelles_monatesende[0]]["adjustierung"]
-        zeitreihe = zeitreihe.dropna()
+        zeitreihe = data[-zeile_aktuelles_monatesende[0]-755:-zeile_aktuelles_monatesende[0]]["adjustierung"] #nachdem das aktuelle Monatsende gefunden wurde, wird die Zeitreihe enstprechend zurechtgestutzt
+        zeitreihe = zeitreihe.dropna() #alle Einträge mit NAs werden gelöscht
 
-
-        if zeitreihe.isna().sum() > 0:
-            Aktie = mitglied
-            aktueller_kurs = "NA"
-            vorhersage = "NA"
-            prozentuale_Änderung = "NA"
-            tatsächlich = "NA"
-            absolute_abweichung = "NA"
-            realtive_abweichung = "NA"
-            datum = aktuelles_datum
-        if len(zeitreihe) < 755:
+        if len(zeitreihe) < 755: #wenn die Zeitreihe durch dropna gekürzt wurde, wird keine Vorhersage erstellt
             Aktie = mitglied
             aktueller_kurs = "NA"
             vorhersage = "NA"
@@ -83,70 +62,46 @@ for i in range(0,len(dax_mitglieder)): #len(dax_mitglieder)
             realtive_abweichung = "NA"
             datum = aktuelles_datum            
         else:
+	    #Im folgenden Codeblog wird die Zeitreihe mit dem MinMaxScaler auf Werte zwischen 0 und 1 skaliert
             daten_scaled = np.reshape(zeitreihe.values, (len(zeitreihe),1))
             scaler = MinMaxScaler(feature_range=(0, 1))
             daten_scaled = scaler.fit_transform(daten_scaled)
             liste= list(daten_scaled.flatten())
-            
- 
-            n_steps_out= 21
-            n_steps_in = 126
-            n_features = 1
-
-            X, y = split_sequence(liste, n_steps_in,n_steps_out)
-
+            #definieren der Variablen für die Architektur des CNN
+            n_steps_out= 21 #Länge des Vektors der Prognose
+            n_steps_in = 126 #Länge des Input-Vektors
+            n_features = 1 #Anzahl der erklärenden Varbiablen
+            X, y = split_sequence(liste, n_steps_in,n_steps_out) #Die Zeitreihe wird mit der split_squence Funktion in Input und Outputverktoren squenziert
             X = X.reshape((X.shape[0], X.shape[1], n_features))
-            # define model
+            #In den folgenden Zeilen wird das Modell zusammengestellt
             model = Sequential()
-            model.add(Conv1D(filters=64, kernel_size=2, activation='relu', input_shape=(n_steps_in, n_features)))
-            model.add(MaxPooling1D(pool_size=2))
-            model.add(Flatten())
-            model.add(Dense(50, activation='relu'))
-            model.add(Dense(n_steps_out))
-            model.compile(optimizer='adam', loss='mse')
-        
-           
-            model.fit(X, y, epochs=10, batch_size= 10)
-            
-           
-            # demonstrate prediction
-            x_input = np.array(liste[-126:])
+            model.add(Conv1D(filters=64, kernel_size=2, activation='relu', input_shape=(n_steps_in, n_features))) #Hier wird die Faltungsschicht erstellt
+            model.add(MaxPooling1D(pool_size=2)) # Hier wird die Poolingschicht eingefügt 
+            model.add(Flatten()) #Einfügen der Flatten-Schicht
+            model.add(Dense(50, activation='relu')) #Erstellen der ersten Dense-Layer
+            model.add(Dense(n_steps_out)) #Erstellen der zweiten Dense-Layer
+            model.compile(optimizer='adam', loss='mse') #kompilieren des Modells
+            model.fit(X, y, epochs=10, batch_size= 10) #und anschließend gefitteg
+            #In den folgenden Zeilen wird die Prognose erstellt 
+            x_input = np.array(liste[-126:]) #Vorbereiten des Inputs für die Prognose
             x_input = x_input.reshape((1, n_steps_in, n_features))
             yhat = model.predict(x_input, verbose=0)
-            print(yhat)
-            
+	    #Verarbeitung der Daten, um sie in die Ergebnisstabelle einzufügen
             Aktie = mitglied
             aktueller_kurs = zeitreihe.values[-1]
-            vorhersage = scaler.inverse_transform(yhat)[-1,-1]
+            vorhersage = scaler.inverse_transform(yhat)[-1,-1] #macht die MinMax-Skalierung rückgängig
             prozentuale_Änderung = vorhersage/aktueller_kurs-1
             tatsächlich = float(data[-zeile_aktuelles_monatesende[0]:-zeile_aktuelles_monatesende[0]+21]['adjustierung'].tail(1))
             absolute_abweichung = tatsächlich-vorhersage
             realtive_abweichung = vorhersage/tatsächlich-1
             datum = aktuelles_datum
             
-            ergebnisse = [Aktie, aktueller_kurs, vorhersage, prozentuale_Änderung, tatsächlich, absolute_abweichung, realtive_abweichung, datum]
-            df = pd.Series(ergebnisse, index=zwischenergebnis_matrix.columns)
-            zwischenergebnis_matrix = zwischenergebnis_matrix.append(df, ignore_index=True)
+            ergebnisse = [Aktie, aktueller_kurs, vorhersage, prozentuale_Änderung, tatsächlich, absolute_abweichung, realtive_abweichung, datum] #überführen der einzelnen Variablen in eine Liste
+            df = pd.Series(ergebnisse, index=zwischenergebnis_matrix.columns) #Überführen der Liste in eine pandas.Series
+            zwischenergebnis_matrix = zwischenergebnis_matrix.append(df, ignore_index=True) #Einfügen der Series in die Ergebnistabelle
             
-    zwischenergebnis_matrix.to_csv(os.path.join(r"D:\Statistik Masterarbeit\Daten\Ergebnisse_CNN", str(datum.date()).replace("\\","/")))
+    zwischenergebnis_matrix.to_csv(os.path.join(r"D:\Statistik Masterarbeit\Daten\Ergebnisse_CNN", str(datum.date()).replace("\\","/"))) #Die Tabelle wird im gegebenen Verzeichnis abgespeichert
      
-    
-    
-    
-    
-    
-    
-    
-    
-model = Sequential()
-model.add(Conv1D(filters=64, kernel_size=2, activation='relu', input_shape=(n_steps_in, n_features), dilation_rate =2))
-model.add(MaxPooling1D(pool_size=2))
-model.add(Flatten())
-model.add(Dense(50, activation='relu'))
-model.add(Dense(n_steps_out))
-model.compile(optimizer='adam', loss='mse')
-        
-        
-        
+   
         
         
