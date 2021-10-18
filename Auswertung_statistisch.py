@@ -101,4 +101,53 @@ for methode in methoden:
     sMAPE = 100/len(daten) * np.sum(2 * np.abs(daten['Prognose'] - daten["tatsächlich"]) / (np.abs(daten["tatsächlich"]) + np.abs(daten['Prognose'])))
     METHODE = methode
     statistische_Auswertung.loc[len(statistische_Auswertung)] = [METHODE, MSE, MAE, MIN, MAX, MAPE, sMAPE, MdAPE]
-      
+     
+        
+     
+
+#percentage better
+
+import itertools
+for methode, methode2 in itertools.combinations(methoden, 2):
+            
+            datums_liste = os.listdir(os.path.join(r"D:\Statistik Masterarbeit\Daten", methode ).replace("\\","/"))
+            auswertung = pd.DataFrame(dtype=object)
+            zähler = 0
+            
+            for i in range(datums_liste.index("2019-12-30"), len(datums_liste)):
+                    df = pd.read_csv(os.path.join(r"D:\Statistik Masterarbeit\Daten", methode, datums_liste[i]).replace("\\","/"), encoding='latin-1')
+                    if sum(df.columns == "Unnamed: 0") > 0:
+                        df = df.drop("Unnamed: 0", axis=1)
+                    if methode == "Ergebnisse_ARIMA":      
+                            df = df[['Prognose', 'tatsächlich', 'Datum']].dropna()
+                            df = df.set_index(df["Datum"])
+                    else:
+                            df = df[['vorhersage', 'tatsÃ¤chlich', 'datum']].dropna()
+                            df = df.rename(columns = {"vorhersage": "Prognose", "tatsÃ¤chlich" : "tatsächlich"})
+                            df = df.set_index(df["datum"])
+                    MAPE1 = np.mean(np.abs(np.subtract(df["tatsächlich"], df['Prognose']) / df["tatsächlich"])) * 100
+                    df = pd.read_csv(os.path.join(r"D:\Statistik Masterarbeit\Daten", methode2, datums_liste[i]).replace("\\","/"), encoding='latin-1')
+                    if sum(df.columns == "Unnamed: 0") > 0:
+                        df = df.drop("Unnamed: 0", axis=1)
+                    if methode2 == "Ergebnisse_ARIMA":      
+                            df = df[['Prognose', 'tatsächlich', 'Datum']].dropna()
+                            df = df.set_index(df["Datum"])
+                    else:
+                            df = df[['vorhersage', 'tatsÃ¤chlich', 'datum']].dropna()
+                            df = df.rename(columns = {"vorhersage": "Prognose", "tatsÃ¤chlich" : "tatsächlich"})
+                            df = df.set_index(df["datum"])
+                    MAPE2 = np.mean(np.abs(np.subtract(df["tatsächlich"], df['Prognose']) / df["tatsächlich"])) * 100
+                    if MAPE1>MAPE2:
+                        zähler = zähler +1
+                    else:
+                        zähler = zähler
+            percentage_better = zähler/len(datums_liste)
+            print(zähler, methode, methode2, percentage_better)
+
+
+
+
+
+
+
+
